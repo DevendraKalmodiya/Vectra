@@ -151,6 +151,8 @@ python -m pytest tests/ -v
 ```
 
 ---
+feat: implement interactive Streamlit Pareto frontier dashboard (Phase 11)
 
-
-Let me know when you are ready to proceed to **Phase 10: Search Service Layer & FastAPI REST API** (`src/service/search_service.py`, `src/api/schemas.py`, and `src/api/main.py`).
+- Add Streamlit dashboard in `dashboard/app.py` for Recall@10 vs. Latency Pareto curve visualization.
+- Implement live comparative search sandbox (Exact vs. IVF-Flat).
+- Update layout parameters with modern `width="stretch"` configurations.
