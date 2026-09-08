@@ -10,7 +10,7 @@ from scripts.run_benchmarks import run_benchmarks
 import config
 
 # -----------------------------------------------------------------------------
-# Streamlit Page & Theme Configuration
+# Streamlit Page & CSS Customizations
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Vectra Control Plane",
@@ -19,10 +19,8 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Navigation Tabs, Metric Cards, and Result Badges
 st.markdown("""
 <style>
-    /* Metric Card Custom Container */
     div[data-testid="stMetric"] {
         background-color: #1E1E2E;
         border: 1px solid #313244;
@@ -31,7 +29,7 @@ st.markdown("""
         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
     div[data-testid="stMetricValue"] {
-        font-size: 1.6rem !important;
+        font-size: 1.5rem !important;
         font-weight: 700 !important;
         color: #89B4FA !important;
         white-space: nowrap;
@@ -42,7 +40,6 @@ st.markdown("""
         color: #CDD6F4 !important;
         font-weight: 600;
     }
-    /* Tab Navigation Enhancements */
     button[data-baseweb="tab"] {
         background-color: #181825;
         border: 1px solid #313244;
@@ -58,7 +55,6 @@ st.markdown("""
         border-bottom: none !important;
         color: #89B4FA !important;
     }
-    /* Result Card Styling */
     .result-card {
         background-color: #181825;
         border-left: 4px solid #313244;
@@ -88,7 +84,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Engine Initialization & Session State Setup
+# Engine Loading & Session Initialization
 # -----------------------------------------------------------------------------
 @st.cache_resource
 def load_engine():
@@ -101,40 +97,50 @@ if "query_history" not in st.session_state:
     st.session_state.query_history = []
 if "last_search" not in st.session_state:
     st.session_state.last_search = None
+if "delete_candidates" not in st.session_state:
+    st.session_state.delete_candidates = []
+if "delete_confirm_stage" not in st.session_state:
+    st.session_state.delete_confirm_stage = False
+if "last_deletion_summary" not in st.session_state:
+    st.session_state.last_deletion_summary = None
 
 stats = engine.get_stats()
 exact_stats = stats["exact"]
 ivf_stats = stats["ivf"]
 
-# Calculate storage counts
-total_allocated = exact_stats.total_vectors + exact_stats.deleted_vectors
 active_vectors = exact_stats.total_vectors
 tombstones = exact_stats.deleted_vectors
+total_allocated = active_vectors + tombstones
 
 # -----------------------------------------------------------------------------
-# Sidebar: Engine Status & Configuration
+# Sidebar: System Overview & Diagnostics
 # -----------------------------------------------------------------------------
 st.sidebar.title("⚡ VECTRA ENGINE")
-st.sidebar.caption("Visual Control Plane & Vector Database Inspection")
+st.sidebar.caption("Visual Control Plane")
 
 st.sidebar.markdown("### 🟢 System Status")
-st.sidebar.markdown("- **Index State**: Loaded & Active")
-st.sidebar.markdown("- **Dataset**: Precomputed Embeddings")
-st.sidebar.markdown("- **Embedding Model**: `all-MiniLM-L6-v2`")
+st.sidebar.markdown("- **Exact Index**: Active")
+st.sidebar.markdown("- **IVF Index**: Trained")
+st.sidebar.markdown("- **Dataset**: Precomputed")
+st.sidebar.markdown("- **Embeddings**: `all-MiniLM-L6-v2`")
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 Index Overview")
+st.sidebar.markdown("### 📊 Index Metrics")
 st.sidebar.metric("Active Vectors", f"{active_vectors:,}")
 st.sidebar.metric("Tombstones", f"{tombstones:,}")
-st.sidebar.metric("Allocated Entries", f"{total_allocated:,}")
+st.sidebar.metric("Allocated Memory Slots", f"{total_allocated:,}")
 st.sidebar.metric("Vector Dimension", f"{exact_stats.dimension}")
 st.sidebar.metric("IVF Clusters (nlist)", f"{engine.ivf_index.nlist}")
 
 st.sidebar.markdown("---")
-advanced_mode = st.sidebar.toggle("⚙️ Advanced Mode", value=False, help="Expose internal execution timing breakdowns, centroid cluster selection, and vector assignments.")
+advanced_mode = st.sidebar.toggle(
+    "⚙️ Advanced Mode",
+    value=False,
+    help="Expose internal execution timing breakdowns, centroid cluster selection, and vector assignments."
+)
 
 # -----------------------------------------------------------------------------
-# Main Header & System Overview
+# Main Header
 # -----------------------------------------------------------------------------
 st.title("⚡ Vectra: Visual Control Plane")
 st.caption("In-Memory Vector Search Engine ($O(N \\cdot D)$ Brute-Force Exact Search vs. IVF-Flat Voronoi ANN)")
@@ -152,7 +158,7 @@ ov7.metric("Compaction", "Clean State" if tombstones == 0 else f"{tombstones} Pe
 st.markdown("---")
 
 # -----------------------------------------------------------------------------
-# Tab Navigation Structure
+# Main Tabs
 # -----------------------------------------------------------------------------
 tab_search, tab_pareto, tab_inspector, tab_ops, tab_history, tab_architecture = st.tabs([
     "🔎 Live Search",
@@ -163,20 +169,13 @@ tab_search, tab_pareto, tab_inspector, tab_ops, tab_history, tab_architecture = 
     "💡 How Vectra Works"
 ])
 
-# Load raw text store for displaying document snippets
-raw_texts = []
-if config.TEXT_STORE_PATH.exists():
-    with open(config.TEXT_STORE_PATH, "r", encoding="utf-8") as f:
-        raw_texts = json.load(f)
-
 # =============================================================================
-# TAB 1: LIVE SEMANTIC SEARCH (HERO FEATURE)
+# TAB 1: LIVE SEARCH (HERO PANEL)
 # =============================================================================
 with tab_search:
     st.subheader("🔎 Live Semantic Search Sandbox")
     st.caption("Compare brute-force exact cosine search against approximate IVF-Flat cell scanning in real-time.")
 
-    # Search Controls Box
     with st.container():
         col_q, col_k, col_np, col_btn = st.columns([3, 1, 1, 1.2])
         with col_q:
@@ -189,18 +188,15 @@ with tab_search:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             run_search = st.button("⚡ Run Comparative Search", type="primary", use_container_width=True)
 
-    # Current Configuration Indicator
-    st.info(f"**Current Search Configuration**: Top-K = `{top_k}` | nprobe = `{nprobe}` | nlist = `{engine.ivf_index.nlist}` | Active Search Space = `{active_vectors:,}` vectors")
+    st.info(f"**Current Configuration**: Top-K = `{top_k}` | nprobe = `{nprobe}` | nlist = `{engine.ivf_index.nlist}` | Active Search Space = `{active_vectors:,}` vectors")
 
     if run_search or st.session_state.last_search is None:
         res_exact = engine.search(query_vector=None, query_text=user_query, index_type="exact", top_k=top_k, nprobe=nprobe)
         res_ivf = engine.search(query_vector=None, query_text=user_query, index_type="ivf", top_k=top_k, nprobe=nprobe)
 
-        # Calculate exact Recall@K
         exact_set = set(res_exact.ids[:top_k])
         ivf_set = set(res_ivf.ids[:top_k])
         recall = len(exact_set.intersection(ivf_set)) / len(exact_set) if exact_set else 0.0
-        
         cand_reduction = (1.0 - (res_ivf.candidates_searched / active_vectors)) * 100.0 if active_vectors > 0 else 0.0
 
         st.session_state.last_search = {
@@ -213,7 +209,6 @@ with tab_search:
             "reduction": cand_reduction
         }
 
-        # Session Query History Log
         st.session_state.query_history.insert(0, {
             "Timestamp": time.strftime("%H:%M:%S"),
             "Query": user_query,
@@ -230,7 +225,6 @@ with tab_search:
     res_exact = ls["res_exact"]
     res_ivf = ls["res_ivf"]
 
-    # Key Insight Sentence Banner
     st.markdown(
         f"#### 💡 Live Query Insight\n"
         f"> **IVF-Flat evaluated `{res_ivf.candidates_searched:,}` of `{active_vectors:,}` vectors "
@@ -246,7 +240,7 @@ with tab_search:
     qp4.metric("Candidates Evaluated", f"{res_ivf.candidates_searched:,}")
     qp5.metric("Candidate Reduction", f"{ls['reduction']:.1f}%")
 
-    # Search Space Reduction Bar Chart
+    # Search Space Bar Chart
     st.markdown("#### 🎯 Search Space Comparison")
     fig_space = go.Figure()
     fig_space.add_trace(go.Bar(
@@ -257,15 +251,10 @@ with tab_search:
         textposition='auto',
         marker_color=["#00CC96", "#89B4FA"]
     ))
-    fig_space.update_layout(
-        height=160,
-        margin=dict(l=10, r=10, t=10, b=10),
-        xaxis_title="Vectors Evaluated",
-        showlegend=False
-    )
+    fig_space.update_layout(height=160, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Vectors Evaluated", showlegend=False)
     st.plotly_chart(fig_space, use_container_width=True)
 
-    # Side-by-Side Results Comparison
+    # Side-by-Side Results
     st.markdown("### ⚔️ Exact vs. IVF-Flat Retrieval Results")
     col_ex_res, col_ivf_res = st.columns(2)
 
@@ -277,7 +266,7 @@ with tab_search:
         st.caption(f"Evaluated all {res_exact.candidates_searched:,} vectors | Latency: {res_exact.latency_ms:.2f} ms")
         
         for rank, (doc_id, score) in enumerate(zip(res_exact.ids, res_exact.scores), 1):
-            text_snippet = raw_texts[doc_id] if doc_id < len(raw_texts) else f"Vector ID #{doc_id}"
+            text_snippet = engine.get_text(doc_id)
             st.markdown(
                 f"<div class='result-card result-card-exact'>"
                 f"<b>Rank #{rank} | Vector ID #{doc_id}</b> — Cosine Similarity: <code>{score:.4f}</code><br/>"
@@ -291,7 +280,7 @@ with tab_search:
         st.caption(f"Evaluated {res_ivf.candidates_searched:,} candidates in {nprobe} cells | Latency: {res_ivf.latency_ms:.2f} ms")
 
         for rank, (doc_id, score) in enumerate(zip(res_ivf.ids, res_ivf.scores), 1):
-            text_snippet = raw_texts[doc_id] if doc_id < len(raw_texts) else f"Vector ID #{doc_id}"
+            text_snippet = engine.get_text(doc_id)
             is_tp = doc_id in exact_id_set
             badge_html = "<span class='badge-tp'>✓ True Positive</span>" if is_tp else "<span class='badge-fp'>❌ False Positive / Lower Rank</span>"
             
@@ -303,46 +292,28 @@ with tab_search:
                 unsafe_allow_html=True
             )
 
-    # Advanced Mode Diagnostics Section
     if advanced_mode:
         st.markdown("---")
-        st.markdown("### 🔬 Advanced Query Diagnostics & Engine Internals")
-        
-        col_diag_clusters, col_diag_timing = st.columns(2)
-        with col_diag_clusters:
-            st.markdown("**Selected IVF Voronoi Cells (Nearest Centroids)**")
-            st.write(f"- $nprobe$ Cells Searched: `{len(res_ivf.selected_clusters)}` / `{engine.ivf_index.nlist}`")
-            st.write(f"- Centroid Cluster IDs: `{res_ivf.selected_clusters}`")
-            st.write(f"- Total Candidate Offsets Gathered: `{res_ivf.candidates_searched:,}`")
-
-        with col_diag_timing:
-            st.markdown("**Query Execution Stage Timing Breakdown**")
+        st.markdown("### 🔬 Advanced Diagnostics & Internals")
+        col_diag1, col_diag2 = st.columns(2)
+        with col_diag1:
+            st.markdown("**Selected IVF Voronoi Cells**")
+            st.write(f"- Searched Cells: `{res_ivf.selected_clusters}`")
+            st.write(f"- Total Candidates Gathered: `{res_ivf.candidates_searched:,}`")
+        with col_diag2:
+            st.markdown("**Stage Timing Breakdown**")
             if res_ivf.stage_latencies_ms:
-                df_timing = pd.DataFrame(
-                    list(res_ivf.stage_latencies_ms.items()),
-                    columns=["Pipeline Stage", "Measured Latency (ms)"]
-                )
+                df_timing = pd.DataFrame(list(res_ivf.stage_latencies_ms.items()), columns=["Pipeline Stage", "Latency (ms)"])
                 st.dataframe(df_timing, hide_index=True, use_container_width=True)
-            else:
-                st.caption("Stage timing breakdown not available.")
 
-        with st.expander("🔎 'Why Did This Result Match?' (Match & Miss Diagnostics)"):
-            st.markdown("#### Retrived IVF Candidate Diagnostics")
+        with st.expander("🔎 'Why Did This Result Match?' (Cluster Assignment Analysis)"):
             for doc_id in res_ivf.ids:
                 cid = engine.get_vector_cluster(doc_id)
                 was_searched = cid in res_ivf.selected_clusters
-                st.write(f"- **Vector ID #{doc_id}**: Assigned to Cluster `#{cid}` | Cluster Searched: `{'✓ Yes' if was_searched else '✗ No'}`")
-
-            # Miss Analysis
-            missed_ids = [vid for vid in exact_ids_order if vid not in ivf_set]
-            if missed_ids:
-                st.markdown("#### ⚠ Exact Ground-Truth Items Omitted by IVF")
-                for missed_id in missed_ids:
-                    cid = engine.get_vector_cluster(missed_id)
-                    st.write(f"- **Exact ID #{missed_id}**: Assigned to Cluster `#{cid}` | Cluster Searched: `✗ No (Cell bypassed by nprobe={nprobe})`")
+                st.write(f"- **Vector ID #{doc_id}**: Cluster `#{cid}` | Cell Searched: `{'✓ Yes' if was_searched else '✗ No'}`")
 
 # =============================================================================
-# TAB 2: BENCHMARK & PARETO FRONTIER
+# TAB 2: BENCHMARK & PARETO
 # =============================================================================
 with tab_pareto:
     st.subheader("📊 Ground Truth Evaluation & Pareto Frontier Analysis")
@@ -350,7 +321,7 @@ with tab_pareto:
 
     benchmark_file = config.DATA_DIR / "benchmark_results.json"
     
-    col_bench_run, col_bench_opt = st.columns([1, 2])
+    col_bench_run, _ = st.columns([1, 2])
     with col_bench_run:
         if st.button("⚡ Execute 500-Query Benchmark Suite", type="primary"):
             with st.spinner("Evaluating ground truth across 500 query vectors..."):
@@ -363,29 +334,15 @@ with tab_pareto:
 
         df_sweep = pd.DataFrame(bench_data["ivf_sweep"])
         exact_p50 = bench_data["exact_baseline"]["latency_p50_ms"]
-        exact_p95 = bench_data["exact_baseline"]["latency_p95_ms"]
 
-        st.markdown("---")
-        st.markdown("### 📈 Global IVF-Flat Pareto Curve (Recall@10 vs. p50 Latency)")
-        
         fig_pareto = px.line(
-            df_sweep,
-            x="latency_p50_ms",
-            y="recall_at_10",
-            text="nprobe",
-            markers=True,
+            df_sweep, x="latency_p50_ms", y="recall_at_10", text="nprobe", markers=True,
             labels={"latency_p50_ms": "p50 Latency (ms)", "recall_at_10": "Recall@10 Accuracy"},
             title="Global Benchmark Sweep (500 Queries)"
         )
         fig_pareto.update_traces(textposition="top center", marker=dict(size=10, color="#FF4B4B"))
-        fig_pareto.add_vline(
-            x=exact_p50,
-            line_dash="dash",
-            line_color="#00CC96",
-            annotation_text=f"Exact Baseline p50 ({exact_p50:.2f} ms)"
-        )
+        fig_pareto.add_vline(x=exact_p50, line_dash="dash", line_color="#00CC96", annotation_text=f"Exact Baseline p50 ({exact_p50:.2f} ms)")
 
-        # Overlay Current Live Query Marker
         if st.session_state.last_search:
             ls = st.session_state.last_search
             fig_pareto.add_trace(go.Scatter(
@@ -400,12 +357,10 @@ with tab_pareto:
 
         st.plotly_chart(fig_pareto, use_container_width=True)
 
-        # Optimal Operating Point Selector
         st.markdown("---")
         st.markdown("### 🎯 Target Recall Operating Point Selector")
         target_recall = st.slider("Select Target Recall Threshold (%):", 50.0, 100.0, 95.0, 1.0) / 100.0
         
-        # Find lowest latency config meeting target recall
         valid_configs = df_sweep[df_sweep["recall_at_10"] >= target_recall]
         if not valid_configs.empty:
             best_config = valid_configs.sort_values(by="latency_p50_ms").iloc[0]
@@ -416,21 +371,10 @@ with tab_pareto:
                 f"- **p50 Latency**: `{best_config['latency_p50_ms']:.2f} ms` (Speedup: `{best_config['speedup_vs_exact']:.1f}x` vs. Exact)\n"
                 f"- **Average Candidates Evaluated**: `{int(best_config['avg_candidates_searched']):,}` vectors"
             )
-        else:
-            st.warning("No nprobe configuration met the target recall threshold.")
 
-        # Benchmark Metrics Table
         st.markdown("---")
         st.markdown("### 📋 Precomputed Global Benchmark Metrics")
         st.dataframe(df_sweep, hide_index=True, use_container_width=True)
-
-        # Latency Distribution Comparison Chart
-        st.markdown("#### ⏱️ Latency Percentile Comparison (p50 vs. p95)")
-        fig_lat = go.Figure()
-        fig_lat.add_trace(go.Bar(x=df_sweep["nprobe"].astype(str), y=df_sweep["latency_p50_ms"], name="p50 Latency (ms)", marker_color="#89B4FA"))
-        fig_lat.add_trace(go.Bar(x=df_sweep["nprobe"].astype(str), y=df_sweep["latency_p95_ms"], name="p95 Latency (ms)", marker_color="#F38BA8"))
-        fig_lat.update_layout(xaxis_title="nprobe setting", yaxis_title="Latency (ms)", barmode='group', height=300)
-        st.plotly_chart(fig_lat, use_container_width=True)
 
 # =============================================================================
 # TAB 3: INDEX INSPECTOR
@@ -449,63 +393,155 @@ with tab_inspector:
     ci4.metric("Max Cluster Size", f"{df_clusters['Vector Density'].max():,}")
 
     st.markdown("---")
-    st.markdown("### 📊 Vector Distribution Across IVF Clusters")
-    st.caption("Note: Natural variance in cluster sizes directly impacts candidate set sizes and query latency predictability.")
-
-    fig_hist = px.bar(
-        df_clusters,
-        x="Cluster ID",
-        y="Vector Density",
-        title="Vector Counts per Inverted List Partition",
-        color="Vector Density",
-        color_continuous_scale="Viridis"
-    )
+    st.markdown("### 📊 Vector Density per Inverted List Partition")
+    fig_hist = px.bar(df_clusters, x="Cluster ID", y="Vector Density", color="Vector Density", color_continuous_scale="Viridis")
     st.plotly_chart(fig_hist, use_container_width=True)
 
 # =============================================================================
-# TAB 4: INDEX OPERATIONS (CRUD)
+# TAB 4: INDEX OPERATIONS (MUTATIONS & DELETION)
 # =============================================================================
 with tab_ops:
-    st.subheader("🛠️ Index Mutation & Memory Compaction Controls")
+    st.subheader("🛠️ Index Operations & Document Lifecycle")
 
-    # Visual Storage Lifecycle Banner
-    st.markdown("#### 🔄 Storage Vector Lifecycle")
-    st.info("`INSERT` ➔ **ACTIVE** ➔ `DELETE` ➔ **TOMBSTONE** ➔ `COMPACT` ➔ **PURGED & RECLAIMED**")
+    st.markdown("#### 🔄 Vector Lifecycle")
+    st.info("`INSERT` ➔ **ACTIVE DOCUMENT** ➔ `TEXT SEARCH` ➔ `SELECT MATCH` ➔ `SOFT DELETE` ➔ **TOMBSTONE** ➔ `COMPACT` ➔ **PURGED**")
 
-    col_ins, col_del = st.columns(2)
+    st.markdown("---")
+    st.markdown("### ➕ Insert Document / Vector")
+    col_ins_1, col_ins_2 = st.columns([1, 2])
+    with col_ins_1:
+        ins_id = st.number_input("Assign Vector ID:", min_value=100000, max_value=999999, value=100001)
+    with col_ins_2:
+        ins_text = st.text_input("Document Content (Embedded on-the-fly):", "Vectra provides vector search with custom inverted indexes.")
+    
+    if st.button("Insert Document into Engine"):
+        engine.insert(vector_id=ins_id, text=ins_text)
+        st.success(f"✓ Embedded and inserted Vector ID #{ins_id} successfully!")
+        st.rerun()
 
-    with col_ins:
-        st.markdown("### ➕ Insert Document / Vector")
-        ins_id = st.number_input("Vector ID:", min_value=100000, max_value=999999, value=100001)
-        ins_text = st.text_area("Document Content (Embedded on-the-fly):", "Vectra provides vector search with custom inverted indexes.")
+    st.markdown("---")
+    st.markdown("### 🗑️ Document Deletion Lifecycle (Text Discovery ➔ ID Mutation)")
+    
+    col_del_search, col_del_direct = st.columns([2, 1])
+
+    # A. PRIMARY WORKFLOW: Text-Based Discovery & Selection
+    with col_del_search:
+        st.markdown("#### 1️⃣ Search Documents to Delete")
+        del_text_query = st.text_input(
+            "Search document text by meaning:",
+            placeholder="e.g. vector database similarity search",
+            key="del_text_input"
+        )
         
-        if st.button("Insert Document into Engine"):
-            engine.insert(vector_id=ins_id, text=ins_text)
-            st.success(f"✓ Inserted Vector ID #{ins_id} successfully!")
-            st.rerun()
+        btn_find_col, btn_clear_col = st.columns([1, 1])
+        with btn_find_col:
+            find_clicked = st.button("🔎 Find Matching Documents", use_container_width=True)
+        with btn_clear_col:
+            if st.button("Clear Search Results", use_container_width=True):
+                st.session_state.delete_candidates = []
+                st.session_state.delete_confirm_stage = False
+                st.rerun()
 
-    with col_del:
-        st.markdown("### 🗑️ Soft-Delete Vector")
-        del_id = st.number_input("Vector ID to Delete:", min_value=0, max_value=999999, value=0)
+        if find_clicked and del_text_query.strip():
+            candidates = engine.find_documents(del_text_query.strip(), top_k=5)
+            st.session_state.delete_candidates = candidates
+            st.session_state.delete_confirm_stage = False
+
+        if st.session_state.delete_candidates:
+            st.markdown("#### 2️⃣ Select Candidate Documents")
+            
+            # Select All Toggle Option
+            select_all = st.checkbox("☐ Select All Displayed Candidate Matches", key="chk_select_all")
+            
+            selected_ids_to_delete = []
+            
+            for cand in st.session_state.delete_candidates:
+                c_id = cand["id"]
+                c_text = cand["text"]
+                c_score = cand["score"]
+                is_exact = cand["is_exact_match"]
+
+                badge = " <span class='badge-tp'>✓ Exact Text Match</span>" if is_exact else ""
+                
+                col_chk, col_info = st.columns([0.08, 0.92])
+                with col_chk:
+                    is_checked = st.checkbox("", key=f"chk_del_{c_id}", value=(select_all or is_exact))
+                    if is_checked:
+                        selected_ids_to_delete.append(c_id)
+                with col_info:
+                    st.markdown(
+                        f"**ID #{c_id}** | Similarity: `{(c_score):.4f}`{badge}<br/>"
+                        f"<span style='color: #A6ADC8; font-size: 0.9rem;'>{c_text}</span>",
+                        unsafe_allow_html=True
+                    )
+
+            if selected_ids_to_delete:
+                num_selected = len(selected_ids_to_delete)
+                st.markdown("#### 3️⃣ Confirm Soft Deletion")
+                
+                if not st.session_state.delete_confirm_stage:
+                    if st.button(f"🗑️ Soft Delete Selected ({num_selected})", type="primary"):
+                        st.session_state.delete_confirm_stage = True
+                        st.session_state.selected_del_ids = selected_ids_to_delete
+                        st.rerun()
+
+            if st.session_state.delete_confirm_stage:
+                st.warning(f"⚠️ **Confirm Soft Deletion**: Soft-delete {len(st.session_state.selected_del_ids)} document(s)?")
+                col_conf, col_canc = st.columns(2)
+                with col_conf:
+                    if st.button("Confirm Soft Delete", type="primary"):
+                        deleted_summary = []
+                        for vid in st.session_state.selected_del_ids:
+                            txt = engine.get_text(vid)
+                            success = engine.delete(vid)
+                            if success:
+                                deleted_summary.append({"id": vid, "text": txt})
+
+                        st.session_state.last_deletion_summary = deleted_summary
+                        st.session_state.delete_candidates = []
+                        st.session_state.delete_confirm_stage = False
+                        st.session_state.selected_del_ids = []
+                        st.success(f"✓ Soft-deleted {len(deleted_summary)} document(s) successfully!")
+                        st.rerun()
+
+                with col_canc:
+                    if st.button("Cancel"):
+                        st.session_state.delete_confirm_stage = False
+                        st.rerun()
+
+        elif find_clicked and not st.session_state.delete_candidates:
+            st.info("No matching active documents found for the entered text.")
+
+        if st.session_state.last_deletion_summary:
+            st.markdown("#### ✓ Recent Deletion Summary")
+            for item in st.session_state.last_deletion_summary:
+                st.write(f"- **ID #{item['id']}**: *\"{item['text']}\"*")
+            st.caption("The vector(s) were logically soft-deleted using tombstones. Switch to 'Live Search' to verify their exclusion from active search results.")
+
+    # B. SECONDARY WORKFLOW: Direct Precision Delete by ID
+    with col_del_direct:
+        st.markdown("#### 🆔 Precision Delete by Vector ID")
+        st.caption("Direct low-level storage mutation bypassing text discovery.")
+        direct_del_id = st.number_input("Target Vector ID:", min_value=0, max_value=999999, value=0)
         
-        if st.button("Soft-Delete Vector"):
-            deleted = engine.delete(vector_id=del_id)
-            if deleted:
-                st.warning(f"✓ Soft-deleted Vector ID #{del_id} with tombstone bitmask.")
+        if st.button("Delete by Vector ID"):
+            txt = engine.get_text(direct_del_id)
+            success = engine.delete(direct_del_id)
+            if success:
+                st.session_state.last_deletion_summary = [{"id": direct_del_id, "text": txt}]
+                st.warning(f"✓ Soft-deleted Vector ID #{direct_del_id} with tombstone bitmask.")
                 st.rerun()
             else:
-                st.error(f"Vector ID #{del_id} not found or already soft-deleted.")
+                st.error(f"Vector ID #{direct_del_id} not found or already soft-deleted.")
 
     st.markdown("---")
     st.markdown("### 🧹 Tombstone Compaction Manager")
-    
     cc1, cc2 = st.columns([2, 1])
     with cc1:
         st.write(f"- **Active Vectors**: `{active_vectors:,}`")
         st.write(f"- **Soft-Deleted Tombstones**: `{tombstones:,}`")
-        st.write(f"- **Total Allocated Entries**: `{total_allocated:,}`")
-        st.caption("Soft deletions use $O(1)$ bitmask markers. Compaction purges soft-deleted entries from contiguous arrays.")
-
+        st.write(f"- **Total Stored Memory Slots**: `{total_allocated:,}`")
+        st.caption("Soft deletions use $O(1)$ bitmask markers. Compaction purges soft-deleted entries from contiguous matrices.")
     with cc2:
         if st.button("⚡ Compact Index Now", type="primary"):
             p_ex, p_ivf = engine.compact()
@@ -521,7 +557,6 @@ with tab_history:
     if st.session_state.query_history:
         df_hist = pd.DataFrame(st.session_state.query_history)
         
-        # Summary Aggregate Metrics
         hs1, hs2, hs3, hs4 = st.columns(4)
         hs1.metric("Queries Executed", len(df_hist))
         hs2.metric("Mean Recall@K", f"{df_hist['Recall@K'].mean() * 100:.1f}%")
@@ -540,52 +575,41 @@ with tab_architecture:
     st.subheader("💡 Architecture & Search Execution Pipeline")
 
     st.markdown("""
-### 1. Vector Search Paradigm
+### 1. Architectural Concepts
 
-* **Exact Brute-Force Search**: Scans all $N$ vectors in contiguous memory to compute exact Cosine similarity ($O(N \\cdot D)$). Provides exact ground truth.
+* **Exact Brute-Force Search**: Scans all $N$ vectors in contiguous memory to compute exact Cosine similarity ($O(N \\cdot D)$). Establishes exact ground truth.
 * **IVF-Flat Approximate Search**: Partitions vector space into $nlist$ Voronoi cells via K-Means. At query time, finds $nprobe$ nearest centroids and evaluates exact distances **only within candidate cells** ($O(nprobe \\cdot \\frac{N}{nlist} \\cdot D)$).
-* **Flat Distance Math**: Within selected candidate cells, standard $L_2$ normalized inner-product distance is computed without lossy vector quantization.
+* **Document Deletion Lifecycle**: Combines semantic text discovery with deterministic ID-based tombstone bitmask soft deletion ($O(1)$).
 
 ---
 
-### 2. Pipeline Execution Flow
+### 2. Deletion Pipeline Execution
 
 ```text
-                        ┌──────────────────────────────┐
-                        │    Natural Language Query    │
-                        └──────────────┬───────────────┘
-                                       │
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │    all-MiniLM-L6-v2 Model    │
-                        │   (384-Dim Query Vector q)   │
-                        └──────────────┬───────────────┘
-                                       │
-            ┌──────────────────────────┴──────────────────────────┐
-            │                                                     │
-            ▼                                                     ▼
-┌──────────────────────────────┐                      ┌──────────────────────────────┐
-│        Exact Index           │                      │       IVF-Flat Index         │
-│   (Ground Truth Baseline)    │                      │(Approximate Nearest Neighbor)│
-├──────────────────────────────┤                      ├──────────────────────────────┤
-│ 1. Scan ALL N vectors        │                      │ 1. Predict nprobe nearest    │
-│ 2. Compute Cosine Sim        │                      │    centroids via K-Means     │
-│ 3. Select Exact Top-K        │                      │ 2. Gather candidate vectors  │
-│                              │                      │    from assigned inverted list│
-│ Time Complexity: O(N · D)    │                      │ 3. Compute Cosine Sim on     │
-└──────────────┬───────────────┘                      │    candidates ONLY           │
-               │                                      │ 4. Select Approximate Top-K  │
-               │                                      │                              │
-               │                                      │ Time Complexity:             │
-               │                                      │ O(nprobe · N/nlist · D)      │
-               │                                      └──────────────┬───────────────┘
-               │                                                     │
-               └───────────────────────┬─────────────────────────────┘
-                                       │
-                                       ▼
-                        ┌──────────────────────────────┐
-                        │   Recall@K & Speedup Metric  │
-                        │     Evaluation Control       │
-                        └──────────────────────────────┘
-```
+                  Document Text Input ("machine learning algorithms")
+                                           │
+                                           ▼
+                                [ 🔎 Find Matching Documents ]
+                                           │
+                                           ▼
+                       Convert text to embedding & search exact index
+                                           │
+                                           ▼
+                     Display candidates with IDs, scores, & exact match badges
+                                           │
+                                           ▼
+                         User explicitly checks target document(s)
+                                           │
+                                           ▼
+                         [ 🗑️ Soft Delete Selected (N) ] -> Confirm
+                                           │
+                                           ▼
+                         Pass selected Vector IDs to engine.delete()
+                                           │
+                                           ▼
+                       Tombstone bitmask applied & search space updated
+                                           │
+                                           ▼
+                        Verify exclusion from subsequent search queries
+
 """)

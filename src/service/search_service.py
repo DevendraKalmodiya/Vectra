@@ -1,5 +1,6 @@
+import json
 import numpy as np
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 from sentence_transformers import SentenceTransformer
 from src.core.exact import ExactIndex
 from src.core.ivf_flat import IVFFlatIndex
@@ -10,7 +11,7 @@ import config
 class SearchService:
     """
     Service layer orchestrating Exact and IVF-Flat search engines,
-    on-the-fly text embeddings, tombstone soft-deletions, and index compaction.
+    on-the-fly text embeddings, text-based document lookups, tombstone soft-deletions, and compaction.
     """
 
     def __init__(self):
@@ -19,19 +20,59 @@ class SearchService:
         self.ivf_index = IVFFlatIndex(dimension=self.dimension, nlist=config.DEFAULT_NLIST, seed=config.RANDOM_SEED)
         self.tombstone_manager = TombstoneManager()
         self.model: Optional[SentenceTransformer] = None
+        self.text_store: Dict[int, str] = {}
 
     def initialize(self, load_data: bool = True) -> None:
-        """Loads precomputed vectors and builds index instances."""
-        if load_data and config.VECTOR_STORE_PATH.exists():
-            vectors = np.load(config.VECTOR_STORE_PATH)
-            self.exact_index.build(vectors)
-            self.ivf_index.build(vectors)
+        """Loads precomputed vectors and text store, and builds index instances."""
+        if load_data:
+            if config.VECTOR_STORE_PATH.exists():
+                vectors = np.load(config.VECTOR_STORE_PATH)
+                self.exact_index.build(vectors)
+                self.ivf_index.build(vectors)
+            if config.TEXT_STORE_PATH.exists():
+                with open(config.TEXT_STORE_PATH, "r", encoding="utf-8") as f:
+                    raw_texts = json.load(f)
+                    self.text_store = {i: txt for i, txt in enumerate(raw_texts)}
 
     def _get_model(self) -> SentenceTransformer:
         """Lazy-loads the embedding transformer model."""
         if self.model is None:
             self.model = SentenceTransformer("all-MiniLM-L6-v2")
         return self.model
+
+    def get_text(self, vector_id: int) -> str:
+        """Retrieves stored text for a vector ID, or fallback placeholder string."""
+        return self.text_store.get(vector_id, f"Vector ID #{vector_id}")
+
+    def find_documents(self, query_text: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """
+        Searches active documents by semantic meaning, identifies exact string matches,
+        and returns candidate documents for explicit user deletion selection.
+        """
+        if not query_text or not query_text.strip():
+            return []
+
+        model = self._get_model()
+        query_vector = model.encode(query_text, convert_to_numpy=True).astype(np.float32)
+        
+        search_res = self.exact_index.search(query_vector, top_k=top_k)
+
+        matches = []
+        normalized_query = query_text.strip().lower()
+
+        for doc_id, score in zip(search_res.ids, search_res.scores):
+            doc_text = self.get_text(doc_id)
+            is_exact = (doc_text.strip().lower() == normalized_query)
+            matches.append({
+                "id": doc_id,
+                "text": doc_text,
+                "score": float(score),
+                "is_exact_match": is_exact
+            })
+
+        # Ensure exact string matches sort to the top
+        matches.sort(key=lambda m: (not m["is_exact_match"], -m["score"]))
+        return matches
 
     def search(
         self,
@@ -65,6 +106,9 @@ class SearchService:
             vector = model.encode(text, convert_to_numpy=True).astype(np.float32)
         if vector is None:
             raise ValueError("Must provide either a vector or text.")
+
+        if text is not None:
+            self.text_store[vector_id] = text
 
         self.exact_index.insert(vector_id, vector)
         self.ivf_index.insert(vector_id, vector)

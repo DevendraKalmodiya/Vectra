@@ -2,6 +2,7 @@ import numpy as np
 from typing import Dict, Set, Any
 from src.core.base import BaseVectorIndex
 
+
 class TombstoneManager:
     """
     Manages soft-deletion tracking, tombstone bitmask states, and index compaction.
@@ -33,7 +34,10 @@ class TombstoneManager:
         and re-indexing active vector offset mappings.
         Returns the count of purged vectors.
         """
-        if index.vectors is None or len(index.vectors) == 0:
+        # Separate type guards to satisfy static type analyzers (Pylance/Pyright)
+        if index.vectors is None:
+            return 0
+        if len(index.vectors) == 0:
             return 0
 
         active_mask = ~index.tombstones
@@ -67,9 +71,12 @@ class TombstoneManager:
 
         # 4. If index has inverted lists (IVF-Flat), rebuild cluster inverted list mappings
         if hasattr(index, "inverted_lists") and hasattr(index, "kmeans") and getattr(index, "is_trained", False):
-            index.inverted_lists = {c: [] for c in range(len(index.kmeans.centroids))}
-            assignments = np.argmax(np.dot(new_vectors, index.kmeans.centroids.T), axis=1)
-            for offset, cluster_id in enumerate(assignments):
-                index.inverted_lists[cluster_id].append(offset)
+            n_centroids = len(index.kmeans.centroids) if hasattr(index.kmeans, "centroids") else getattr(index, "nlist", 100)
+            index.inverted_lists = {c: [] for c in range(n_centroids)}
+
+            if len(new_vectors) > 0 and hasattr(index.kmeans, "centroids"):
+                assignments = np.argmax(np.dot(new_vectors, index.kmeans.centroids.T), axis=1)
+                for offset, cluster_id in enumerate(assignments):
+                    index.inverted_lists[cluster_id].append(offset)
 
         return num_purged
