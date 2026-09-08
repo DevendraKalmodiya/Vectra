@@ -1,9 +1,13 @@
+Absolutely — here’s the **updated README after Phase 3**, keeping the documentation technically accurate and aligned with the current implementation.
+
+I also fixed the earlier wording **“zero-external-dependency”** to **“zero external vector-search dependencies”**, which is much more defensible.
+
 ````markdown
 # Vectra: In-Memory Vector Search Engine
 
 Vectra is an in-memory vector search engine built with **Python and NumPy**, designed to demonstrate the internal mechanics of exact and approximate nearest-neighbor (ANN) search.
 
-The project implements **exact brute-force search** as the ground-truth baseline and a handcrafted **IVF-Flat index** for approximate search, without relying on Pinecone, FAISS, Chroma, `sklearn.neighbors`, or other vector-search libraries.
+The project implements **exact brute-force search** as the ground-truth baseline and will implement a handcrafted **IVF-Flat index** for approximate search, without relying on Pinecone, FAISS, Chroma, `sklearn.neighbors`, or other vector-search libraries.
 
 The core objective is to measure the trade-off between **search accuracy, latency, and computational cost**.
 
@@ -51,46 +55,57 @@ The core objective is to measure the trade-off between **search accuracy, latenc
 
 ---
 
-## 🎯 Project Objective
+# 🎯 Project Objective
 
-Traditional vector databases expose a simple interface such as:
+Vector databases usually hide the underlying mechanics of vector search behind a simple API.
+
+Vectra goes one level deeper by implementing the fundamental search components itself.
+
+The system is designed around two search strategies:
 
 ```text
-insert(vector)
-search(query, k)
-delete(id)
+                 Query Vector
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+       Exact Search        IVF-Flat
+             │                 │
+             ▼                 ▼
+        Ground Truth      Approximate
+             │              Results
+             └────────┬────────┘
+                      ▼
+                 Recall@K
 ```
 
-Vectra goes one level deeper and implements the core search mechanisms itself.
+The exact index provides the reference answer, while IVF-Flat attempts to find similar results while examining significantly fewer vectors.
 
-The project investigates a fundamental ANN question:
+The central question is:
 
-> **How much computation can we eliminate while still retrieving almost all of the true nearest neighbors?**
-
-The exact index provides the ground truth, while IVF-Flat attempts to achieve similar search quality by examining only a fraction of the dataset.
+> **How much computation can we eliminate while preserving most of the accuracy of exact nearest-neighbor search?**
 
 ---
 
-# 🚦 Implementation Status
+# 🚦 Phase Implementation Status
 
-| Phase        | Description                                               | Status                 |
-| :----------- | :-------------------------------------------------------- | :--------------------- |
-| **Phase 1**  | Project Foundation, Environment, Config, Logger & Metrics | ✅ Completed & Verified |
-| **Phase 2**  | Vector Mathematics Engine & Math Tests                    | ✅ Completed & Verified |
-| **Phase 3**  | Exact Brute-Force Search Engine                           | ⏳ Pending              |
-| **Phase 4**  | Corpus Embeddings & Dataset Generator                     | ⏳ Pending              |
-| **Phase 5**  | Vectorized K-Means Partitioning Engine                    | ⏳ Pending              |
-| **Phase 6**  | Handcrafted IVF-Flat Inverted Index                       | ⏳ Pending              |
-| **Phase 7**  | Ground-Truth & Recall@K Evaluation                        | ⏳ Pending              |
-| **Phase 8**  | Latency & Performance Benchmarking                        | ⏳ Pending              |
-| **Phase 9**  | Tombstone Soft-Deletion Manager                           | ⏳ Pending              |
-| **Phase 10** | Search Service Layer & FastAPI REST API                   | ⏳ Pending              |
-| **Phase 11** | Streamlit Interactive Benchmark Dashboard                 | ⏳ Pending              |
-| **Phase 12** | End-to-End Testing & Demonstration Setup                  | ⏳ Pending              |
+| Phase        | Description                                                 | Status                 |
+| :----------- | :---------------------------------------------------------- | :--------------------- |
+| **Phase 1**  | Project Foundation, Environment, Config, Logger & Metrics   | ✅ Completed & Verified |
+| **Phase 2**  | Vector Mathematics Engine (`distance.py`) & Math Tests      | ✅ Completed & Verified |
+| **Phase 3**  | Abstract Index Interface & Exact Search Engine (`exact.py`) | ✅ Completed & Verified |
+| **Phase 4**  | Corpus Embeddings & Dataset Generator (`prepare_data.py`)   | ⏳ Pending              |
+| **Phase 5**  | Vectorized K-Means Partitioning Engine (`kmeans.py`)        | ⏳ Pending              |
+| **Phase 6**  | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`)         | ⏳ Pending              |
+| **Phase 7**  | Ground Truth & Recall@K Evaluation                          | ⏳ Pending              |
+| **Phase 8**  | Latency & Performance Benchmark Engine                      | ⏳ Pending              |
+| **Phase 9**  | Tombstone Soft-Deletion Manager                             | ⏳ Pending              |
+| **Phase 10** | Search Service Layer & FastAPI REST API                     | ⏳ Pending              |
+| **Phase 11** | Streamlit Interactive Benchmark Dashboard                   | ⏳ Pending              |
+| **Phase 12** | End-to-End Testing & Demonstration Setup                    | ⏳ Pending              |
 
 ---
 
-# 📂 Project Structure
+# 📂 Project Directory Structure
 
 ```text
 Vectra/
@@ -150,74 +165,140 @@ Vectra/
 
 ---
 
-# 🧮 Core Search Algorithms
+# 🧮 Core Algorithms
 
-## 1. Exact Brute-Force Search
+## 1. Vector Mathematics
 
-The exact index compares a query vector against every vector in the dataset.
+The mathematical foundation of Vectra is implemented using NumPy.
 
-For normalized vectors, cosine similarity can be computed using a dot product:
+The current vector mathematics layer provides:
+
+* L2 normalization
+* Cosine similarity
+* Vector dot products
+* Matrix-vector operations
+* Matrix multiplication
+* Top-K selection
+* Numerical edge-case handling
+
+For normalized vectors, cosine similarity can be computed as:
 
 ```text
 similarity(q, x) = q · x
 ```
 
-For `N` vectors with dimension `D`, a single query requires approximately:
+These operations form the computational foundation for both exact and approximate search.
+
+---
+
+# 2. Exact Brute-Force Search
+
+The `ExactIndex` compares a query vector against every stored vector.
+
+For `N` vectors of dimension `D`, the query complexity is approximately:
 
 ```text
 O(N × D)
 ```
 
-vector operations.
+The process is:
 
-Although computationally expensive at scale, exact search provides the **ground-truth nearest neighbors** required to evaluate approximate search.
+```text
+             Query
+                │
+                ▼
+       Compare with every
+       stored vector
+                │
+                ▼
+       Compute similarity
+                │
+                ▼
+          Top-K selection
+                │
+                ▼
+             Results
+```
+
+Although brute-force search becomes expensive as the dataset grows, it has an important role in Vectra:
+
+> **Exact search is the ground truth.**
+
+Every approximate-search result can be compared against the exact result to calculate recall.
 
 ---
 
-## 2. IVF-Flat
+# 3. Index Abstraction
 
-Vectra implements an **Inverted File Index (IVF-Flat)** from scratch.
+Vectra defines a common index interface so different search strategies can be used through the same API.
 
-The dataset is partitioned into `nlist` clusters using K-Means.
+Conceptually:
+
+```text
+                VectorIndex
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+     ExactIndex           IVFFlatIndex
+     (Exact)              (Approximate)
+```
+
+This separation allows the search implementation to evolve without coupling the rest of the system to a specific indexing strategy.
+
+The interface establishes the foundation for operations such as:
+
+```text
+insert()
+search()
+delete()
+```
+
+as additional index functionality is implemented.
+
+---
+
+# 🎯 IVF-Flat
+
+IVF-Flat will provide the approximate nearest-neighbor component of Vectra.
+
+The dataset will be partitioned into `nlist` clusters using K-Means.
 
 ```text
                          Dataset
                             │
-                 ┌──────────┴──────────┐
-                 ▼                     ▼
-             Centroid 1            Centroid 2
-                 │                     │
-            ┌────┴────┐           ┌────┴────┐
-            ▼         ▼           ▼         ▼
-         Vector    Vector      Vector    Vector
+                ┌───────────┴───────────┐
+                ▼                       ▼
+            Centroid 1              Centroid 2
+                │                       │
+          ┌─────┴─────┐           ┌─────┴─────┐
+          ▼           ▼           ▼           ▼
+       Vector      Vector      Vector      Vector
 ```
 
 During a query:
 
-1. Calculate similarity/distance to the cluster centroids.
+1. Find the closest cluster centroids.
 2. Select the closest `nprobe` clusters.
-3. Retrieve vectors belonging to those clusters.
+3. Retrieve vectors from those clusters.
 4. Compute exact similarity against those candidates.
-5. Return the top-K results.
+5. Select the final top-K results.
 
-Unlike quantized approaches, **IVF-Flat keeps the original vectors** inside each inverted list.
-
-The approximation comes from searching only a subset of the clusters.
+The approximation comes from searching only a subset of the dataset.
 
 ---
 
 # 🎚️ The `nprobe` Trade-off
 
-`nprobe` controls how many clusters are searched for each query.
+`nprobe` controls how many IVF clusters are searched.
 
 ```text
 Higher nprobe
       │
       ├── More clusters searched
-      ├── More candidate vectors
+      ├── More candidates
       ├── More computation
       └── Higher recall
-           
+
 Lower nprobe
       │
       ├── Fewer clusters searched
@@ -226,49 +307,49 @@ Lower nprobe
       └── Potentially lower recall
 ```
 
-This makes `nprobe` the primary accuracy-versus-performance tuning parameter in the IVF-Flat implementation.
-
-The benchmark suite will make this trade-off measurable.
+This creates the primary accuracy-versus-performance trade-off that Vectra will measure.
 
 ---
 
 # 📊 Evaluation Methodology
 
-Vectra uses the **ExactIndex as the ground-truth reference**.
-
-For a collection of vectors:
+The evaluation pipeline will use `ExactIndex` as the ground-truth reference.
 
 ```text
-                 Dataset
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-     Exact Search         IVF-Flat
-          │                   │
-          ▼                   ▼
-     Ground Truth        Approximate
-          │                Results
-          └─────────┬─────────┘
-                    ▼
-              Recall@K
+                    Dataset
+                       │
+              ┌────────┴────────┐
+              ▼                 ▼
+        ExactIndex          IVF-Flat
+              │                 │
+              ▼                 ▼
+        Ground Truth       ANN Results
+              │                 │
+              └────────┬────────┘
+                       ▼
+                  Evaluation
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+       Recall        Latency    Candidates
 ```
 
-The evaluation measures:
+The benchmark suite will measure:
 
-* **Recall@K**
-* **Search latency**
-* **Index build time**
-* **Number of candidates examined**
-* **Distance/similarity calculations**
-* **Candidate reduction**
-* **Memory usage**
-* **Effect of `nprobe`**
+* Recall@K
+* Search latency
+* Index build time
+* Number of candidates examined
+* Number of similarity calculations
+* Candidate reduction
+* Memory usage
+* Effect of `nprobe`
 
 ---
 
 # 📈 Recall@K
 
-Recall@K measures how many of the true top-K neighbors are recovered by the approximate index.
+Recall@K measures how many of the true nearest neighbors are recovered by the approximate index.
 
 ```text
 Recall@K =
@@ -277,7 +358,7 @@ Recall@K =
                   K
 ```
 
-For example:
+Example:
 
 ```text
 Exact: [1, 2, 3, 4, 5]
@@ -291,88 +372,62 @@ Three of the five ground-truth neighbors were recovered:
 Recall@5 = 3 / 5 = 0.60
 ```
 
-This allows Vectra to evaluate approximate search quality independently from latency.
+This allows approximate search quality to be measured objectively.
 
 ---
 
 # 🗑️ Soft Deletion
 
-Vectra uses a **tombstone-based deletion strategy**.
+Vectra will support logical deletion using tombstones.
 
-Instead of immediately restructuring the index, a deleted vector is marked as inactive.
+Instead of immediately restructuring an index, deleted vectors can be marked as inactive:
 
 ```text
-                 Vector ID
-                     │
-                     ▼
-              Tombstone Mask
-                 /       \
-                /         \
-               ▼           ▼
-            Active       Deleted
+                Vector ID
+                    │
+                    ▼
+             Tombstone Mask
+                /       \
+               /         \
+              ▼           ▼
+           Active       Deleted
 ```
 
-This allows logical deletion without immediately rebuilding the index.
+This avoids expensive immediate index reconstruction.
 
 Physical cleanup and index compaction are planned as future extensions.
 
 ---
 
-# 🧱 Design Constraints
+# ⚡ Quickstart
 
-The project intentionally avoids existing vector-search implementations.
+## 1. Create the Virtual Environment
 
-### Not Used
-
-```text
-Pinecone
-FAISS
-Chroma
-sklearn.neighbors
-```
-
-### Core Technology
-
-```text
-Python
-NumPy
-```
-
-### Application Layer
-
-```text
-FastAPI
-Streamlit
-pytest
-```
-
-NumPy is used for vectorized numerical operations.
-
-The actual indexing and search algorithms—including exact search, K-Means partitioning, IVF construction, candidate selection, and ANN evaluation—are implemented within Vectra.
-
----
-
-# ⚡ Phase 1 & Phase 2 Verification
-
-The development environment is isolated inside a Python virtual environment.
-
-### Activate the environment
-
-#### Windows PowerShell
+### Windows PowerShell
 
 ```powershell
+python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-### Install dependencies
+### Linux / macOS
 
-```powershell
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+---
+
+## 2. Install Dependencies
+
+```bash
 python -m pip install -r requirements.txt
 ```
 
-### Verify the Python environment
+Verify the environment:
 
-```powershell
+```bash
 python --version
 python -m pip --version
 ```
@@ -385,64 +440,48 @@ Vectra\venv\Lib\site-packages\pip
 
 ---
 
-## Phase 2 Math Tests
+# 🧪 Verification
 
-Run:
+## Completed Phases: 1–3
 
-```powershell
+Run the complete test suite:
+
+```bash
+python -m pytest tests/ -v
+```
+
+The current tests cover the implemented mathematical and exact-search components.
+
+### Phase 2
+
+```bash
 python -m pytest tests/test_math.py -v
 ```
 
-These tests verify the vector mathematics layer, including:
+Verifies:
 
 * L2 normalization
 * Cosine similarity
-* Dot-product calculations
-* Matrix multiplication / GEMM operations
+* Dot products
+* Matrix operations
 * Top-K selection
 * Numerical correctness
-* Edge-case behavior
 
-Phase 2 establishes the numerical foundation used by both the exact and IVF-Flat indexes.
+### Phase 3
 
----
-
-# 🔬 Performance Model
-
-For exact search:
-
-```text
-Query
-  │
-  ▼
-Compare against N vectors
-  │
-  ▼
-Compute similarities
-  │
-  ▼
-Select Top-K
+```bash
+python -m pytest tests/test_exact.py -v
 ```
 
-Approximate IVF-Flat search:
+Verifies:
 
-```text
-Query
-  │
-  ▼
-Compare against cluster centroids
-  │
-  ▼
-Select nprobe clusters
-  │
-  ▼
-Search only candidate vectors
-  │
-  ▼
-Select Top-K
-```
+* Exact nearest-neighbor correctness
+* Top-K results
+* Query behavior
+* Index behavior
+* Edge cases
 
-The performance benefit comes from reducing the number of vectors that require full similarity evaluation.
+The exact index will later serve as the reference implementation for validating IVF-Flat.
 
 ---
 
@@ -453,7 +492,7 @@ The performance benefit comes from reducing the number of vectors that require f
 | Build     |   O(N × D)   |     O(I × N × D)     |
 | Query     |   O(N × D)   | O(nlist × D + C × D) |
 | Delete    | O(1) logical |     O(1) logical     |
-| Search    |     Exact    |      Approximate     |
+| Accuracy  |     Exact    |      Approximate     |
 
 Where:
 
@@ -464,58 +503,119 @@ Where:
 * `nprobe` = number of clusters searched
 * `C` = number of candidate vectors examined
 
-The actual measured performance depends on vector dimensionality, dataset distribution, hardware, and index parameters.
+Actual performance depends on dataset size, vector dimensionality, data distribution, hardware, and index parameters.
+
+---
+
+# 🧱 Design Constraints
+
+Vectra intentionally avoids existing vector-search implementations.
+
+### Not Used
+
+```text
+Pinecone
+FAISS
+Chroma
+sklearn.neighbors
+```
+
+### Core Technologies
+
+```text
+Python
+NumPy
+```
+
+### Application & Testing
+
+```text
+FastAPI
+Streamlit
+pytest
+```
+
+NumPy is used for vectorized numerical computation.
+
+The indexing and search algorithms themselves are implemented as part of Vectra.
 
 ---
 
 # 🖥️ Interactive Dashboard
 
-The Streamlit dashboard will provide an experimental interface for comparing exact and approximate search.
+The planned Streamlit dashboard will provide an interactive laboratory for comparing exact and approximate search.
 
-The intended interface includes:
+The interface will expose parameters such as:
+
+* Query
+* Index type
+* Top-K
+* `nprobe`
+* Dataset configuration
+
+and display metrics including:
 
 ```text
-┌───────────────────────────────────────────┐
-│                  VECTRA                   │
-│                                           │
-│ Query: [ semantic search query          ] │
-│                                           │
-│ Index:  [ Exact ▼ ]   K: [10]             │
-│                                           │
-│ nprobe: [──────●────────]                 │
-│                                           │
-│ ┌───────────────────────────────────────┐ │
-│ │              Results                  │ │
-│ └───────────────────────────────────────┘ │
-│                                           │
-│ Recall:          96.4%                    │
-│ Latency:         2.31 ms                 │
-│ Candidates:      842                      │
-│ Candidate ↓:     98.3%                   │
-└───────────────────────────────────────────┘
+Search Results
+Recall@K
+Latency
+Candidates Examined
+Candidate Reduction
 ```
 
-> The displayed benchmark values will be generated from the actual running system and will not be hard-coded.
+The goal is to make the ANN trade-off visible rather than presenting only final search results.
+
+---
+
+# 🔬 Benchmark Philosophy
+
+Vectra will not hard-code performance claims.
+
+Benchmark results will be generated from the actual implementation and hardware.
+
+The final benchmark will allow comparisons such as:
+
+```text
+nprobe = 1
+    ↓
+Low computation
+Low latency
+Potentially lower recall
+
+nprobe = 5
+    ↓
+More computation
+Higher recall
+
+nprobe = 10
+    ↓
+More computation
+Higher recall
+
+nprobe = ...
+```
+
+This makes the final performance claims reproducible and defensible during evaluation.
 
 ---
 
 # 🌱 Future Extensions
 
-The MVP focuses on implementing and validating the core search engine first.
+The MVP focuses first on implementing and validating the core search algorithms.
 
 Potential extensions include:
 
 ### Adaptive `nprobe`
 
-Automatically select an appropriate `nprobe` based on query characteristics or a target recall.
+Automatically select `nprobe` based on query characteristics or a target recall.
 
 ### Batch Search
 
-Process multiple queries together using matrix operations to improve computational efficiency.
+Process multiple queries together using matrix operations.
 
 ### Memory-Mapped Storage
 
-Use NumPy `memmap` to support datasets that exceed available RAM.
+Use NumPy `memmap` to support datasets larger than available RAM.
 
 ### Write-Ahead Logging
 
@@ -527,135 +627,107 @@ Periodically rebuild index structures to physically remove tombstoned vectors.
 
 ### Distributed / Sharded Search
 
-Partition the dataset across multiple workers and merge their top-K results.
-
----
-
-# 🧪 Testing Strategy
-
-Vectra uses automated tests to validate each layer independently.
-
-```text
-Vector Math
-     │
-     ▼
-Exact Search
-     │
-     ▼
-K-Means
-     │
-     ▼
-IVF-Flat
-     │
-     ▼
-Recall & Benchmarks
-     │
-     ▼
-API
-     │
-     ▼
-End-to-End System
-```
-
-The exact index serves as the reference implementation for validating approximate search correctness.
+Partition the dataset across workers and merge their top-K results.
 
 ---
 
 # 🛠️ Development Roadmap
 
-The implementation follows a bottom-up approach:
-
 ```text
 Phase 1
 Project Foundation
-       │
-       ▼
+        │
+        ▼
 Phase 2
 Vector Mathematics
-       │
-       ▼
+        │
+        ▼
 Phase 3
 Exact Search
-       │
-       ▼
+        │
+        ▼
 Phase 4
 Dataset & Embeddings
-       │
-       ▼
+        │
+        ▼
 Phase 5
 K-Means
-       │
-       ▼
+        │
+        ▼
 Phase 6
 IVF-Flat
-       │
-       ▼
+        │
+        ▼
 Phase 7–8
 Recall & Performance
-       │
-       ▼
+        │
+        ▼
 Phase 9
 Deletion
-       │
-       ▼
+        │
+        ▼
 Phase 10
 API
-       │
-       ▼
+        │
+        ▼
 Phase 11
 Dashboard
-       │
-       ▼
+        │
+        ▼
 Phase 12
 Testing & Demo
 ```
 
-Each phase is validated before the next layer is built.
-
----
-
-# 💡 Core Insight
-
-The central idea behind Vectra is simple:
-
-```text
-                    ACCURACY
-                       ▲
-                       │
-                Higher nprobe
-                       │
-                       │
-                       │
- LOW COMPUTATION ◄─────┼─────► HIGH COMPUTATION
-                       │
-                       │
-                 Lower nprobe
-                       │
-                       ▼
-                  LOWER RECALL
-```
-
-Exact search gives us the answer.
-
-IVF-Flat tries to find nearly the same answer while examining far fewer vectors.
-
-The benchmark tells us **how much accuracy we give up for the computation we save**.
+Each phase is implemented and verified before moving to the next layer.
 
 ---
 
 # 📌 Current Status
 
-**Phase 1 — Completed & Verified**
+### Phase 1 — Completed ✅
 
-Project foundation, virtual environment, configuration, logging, and metrics infrastructure are in place.
+Project foundation, environment setup, configuration, logging, and metrics infrastructure are implemented and verified.
 
-**Phase 2 — Completed & Verified**
+### Phase 2 — Completed ✅
 
-The vector mathematics layer is implemented and tested, providing the numerical foundation for the search indexes.
+The vector mathematics engine is implemented and tested, providing the numerical foundation for vector search.
 
-**Next: Phase 3 — Exact Search Engine**
+### Phase 3 — Completed ✅
 
-The next implementation step is the brute-force `ExactIndex`, which will become the ground-truth reference for all subsequent ANN evaluation.
+The abstract index interface and exact brute-force search engine are implemented and verified through automated tests.
+
+### Next — Phase 4 ⏳
+
+Build the corpus embedding and dataset-generation pipeline required to create the benchmark workload for Vectra.
+
+---
+
+# 💡 The Core Idea
+
+Vectra is ultimately about one measurable systems trade-off:
+
+```text
+                         ACCURACY
+                            ▲
+                            │
+                     Higher nprobe
+                            │
+                            │
+                            │
+     LOWER COMPUTATION ◄────┼────► HIGHER COMPUTATION
+                            │
+                            │
+                      Lower nprobe
+                            │
+                            ▼
+                       LOWER RECALL
+```
+
+Exact search tells us the correct answer.
+
+IVF-Flat attempts to find nearly the same answer while examining far fewer vectors.
+
+The benchmark tells us **how much computation we save and how much accuracy we retain.**
 
 ---
 
@@ -665,5 +737,17 @@ This project is intended for educational and engineering demonstration purposes.
 
 ```
 
-One thing I especially like about this version for the placement evaluation: **it doesn't pretend Vectra is already a production-grade vector database.** It makes the engineering experiment the centerpiece—**exact search → IVF-Flat → measure what you save and what you lose**. That's a much stronger interview story.
+### One important thing before committing this
+
+Your current README says:
+
+> `Vectra is a high-performance, zero-external-dependency...`
+
+I'd **definitely not keep that wording**. At Phase 3, you haven't benchmarked performance yet, and the project does have external application/testing dependencies.
+
+The opening above is safer and stronger:
+
+> **“Vectra is an in-memory vector search engine built with Python and NumPy…”**
+
+Then, once Phase 8 gives you actual benchmark results, we can make the README much more impressive with a **real benchmark table and recall-vs-latency chart** instead of making performance claims upfront.
 ```
