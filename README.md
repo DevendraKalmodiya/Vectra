@@ -1,3 +1,7 @@
+Phase 6 is verified and fully operational. All IVF-Flat unit tests passed cleanly.
+
+### **Updated `README.md**`
+
 ```markdown
 # Vectra: In-Memory Vector Search Engine
 
@@ -58,7 +62,7 @@ Vectra is a high-performance, zero-external-dependency in-memory vector database
 | **Phase 3** | Abstract Base Class & Exact Search Engine (`exact.py`) | ✅ Completed & Verified |
 | **Phase 4** | Corpus Embeddings & Dataset Generator (`prepare_data.py`) | ✅ Completed & Verified |
 | **Phase 5** | Vectorized K-Means Partitioning Engine (`kmeans.py`) | ✅ Completed & Verified |
-| **Phase 6** | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`) | ⏳ Pending |
+| **Phase 6** | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`) | ✅ Completed & Verified |
 | **Phase 7 & 8**| Ground Truth Recall@K & Latency Benchmark Engine | ⏳ Pending |
 | **Phase 9** | Tombstone Soft-Deletion Manager | ⏳ Pending |
 | **Phase 10**| Search Service Layer & FastAPI REST API | ⏳ Pending |
@@ -147,4 +151,15 @@ python -m pytest tests/ -v
 
 ```
 
+---
+
+### **Git Commit Command**
+
+```bash
+git add .
+git commit -m "feat: implement handcrafted IVF-Flat index engine with unit tests (Phase 6)"
+git push
+
 ```
+
+Let me know when you are ready to proceed to **Phase 7 & 8: Ground Truth Recall@K & Latency Benchmark Engine** (`scripts/run_benchmarks.py`).
