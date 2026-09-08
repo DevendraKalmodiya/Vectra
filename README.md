@@ -1,13 +1,3 @@
-Yes. I’d make a few corrections while updating it:
-
-* **“zero-external-dependency” is incorrect** because the project uses FastAPI, Streamlit, pytest, etc. Better: **“zero external vector-search dependencies.”**
-* Phase 3 should be **Exact Search**, while Phase 9 handles the dedicated tombstone manager.
-* Avoid calling it **“high-performance”** before we have actual benchmark numbers. Say **“performance-oriented”** or simply “in-memory.”
-* Keep the README honest about what is implemented versus planned.
-* Add the actual Phase 1/2 verification commands and what they validate.
-
-Here is the updated README:
-
 ````markdown
 # Vectra: In-Memory Vector Search Engine
 
