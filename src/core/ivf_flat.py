@@ -5,20 +5,23 @@ from src.core.base import BaseVectorIndex, SearchResult, IndexStats
 from src.core.distance import l2_normalize, batch_cosine_similarity, top_k_selection
 from src.core.kmeans import KMeansCluster
 
+
 class IVFFlatIndex(BaseVectorIndex):
     """
     Inverted File Index (IVF-Flat) Engine.
     Partitions vector space into nlist Voronoi cells via K-Means clustering.
     Searches only the top nprobe nearest cells to trade Recall@K for speed.
+    Instrumented with stage telemetry timing and cluster inspection helpers.
     """
 
     def __init__(self, dimension: int = 384, nlist: int = 100, nprobe: int = 4, seed: int = 42):
+        super().__init__(dimension)
         self.dimension = dimension
         self.nlist = nlist
         self.nprobe = nprobe
         self.seed = seed
         self.kmeans = KMeansCluster(nlist=self.nlist, seed=self.seed)
-        
+
         self.vectors: Optional[np.ndarray] = None          # Contiguous (N, D) float32 matrix
         self.inverted_lists: Dict[int, List[int]] = {}     # Maps centroid_id -> list of array offsets
         self.id_to_offset: Dict[int, int] = {}             # Maps external ID -> array offset
@@ -55,23 +58,47 @@ class IVFFlatIndex(BaseVectorIndex):
     def search(self, query: np.ndarray, top_k: int = 10, **kwargs: Any) -> SearchResult:
         """Searches candidate vectors residing in the top nprobe nearest Voronoi cells."""
         if not self.is_trained or self.vectors is None or len(self.vectors) == 0:
-            return SearchResult(ids=[], scores=[], latency_ms=0.0, candidates_searched=0, distance_calcs=0)
+            return SearchResult(
+                ids=[],
+                scores=[],
+                latency_ms=0.0,
+                candidates_searched=0,
+                distance_calcs=0,
+                selected_clusters=[],
+                stage_latencies_ms={}
+            )
 
-        start_time = time.perf_counter()
+        t_total_start = time.perf_counter()
         nprobe = kwargs.get("nprobe", self.nprobe)
+        stage_latencies: Dict[str, float] = {}
+
         norm_query = l2_normalize(query.astype(np.float32))
 
-        # 1. Identify top nprobe target cluster centroids
+        # 1. Identify top nprobe target cluster centroids (Centroid Search Stage)
+        t0 = time.perf_counter()
         target_centroids = self.kmeans.predict_centroids(norm_query, nprobe=nprobe)
+        target_centroids_list = [int(c) for c in target_centroids]
+        stage_latencies["centroid_search_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # 2. Gather candidate offsets across target inverted lists
+        # 2. Gather candidate offsets across target inverted lists (Candidate Gathering Stage)
+        t0 = time.perf_counter()
         candidate_offsets: List[int] = []
-        for c_id in target_centroids:
+        for c_id in target_centroids_list:
             candidate_offsets.extend(self.inverted_lists.get(c_id, []))
 
+        stage_latencies["candidate_gathering_ms"] = (time.perf_counter() - t0) * 1000.0
+
         if not candidate_offsets:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            return SearchResult(ids=[], scores=[], latency_ms=elapsed_ms, candidates_searched=0, distance_calcs=0)
+            elapsed_ms = (time.perf_counter() - t_total_start) * 1000.0
+            return SearchResult(
+                ids=[],
+                scores=[],
+                latency_ms=elapsed_ms,
+                candidates_searched=0,
+                distance_calcs=0,
+                selected_clusters=target_centroids_list,
+                stage_latencies_ms=stage_latencies
+            )
 
         candidate_offsets_arr = np.array(candidate_offsets, dtype=np.int64)
 
@@ -80,28 +107,42 @@ class IVFFlatIndex(BaseVectorIndex):
         active_offsets = candidate_offsets_arr[active_mask]
 
         if len(active_offsets) == 0:
-            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            return SearchResult(ids=[], scores=[], latency_ms=elapsed_ms, candidates_searched=len(candidate_offsets_arr), distance_calcs=0)
+            elapsed_ms = (time.perf_counter() - t_total_start) * 1000.0
+            return SearchResult(
+                ids=[],
+                scores=[],
+                latency_ms=elapsed_ms,
+                candidates_searched=len(candidate_offsets_arr),
+                distance_calcs=0,
+                selected_clusters=target_centroids_list,
+                stage_latencies_ms=stage_latencies
+            )
 
-        # 4. Compute inner-product similarity against candidate subset
+        # 4. Compute inner-product similarity against candidate subset (Distance Computation Stage)
+        t0 = time.perf_counter()
         candidate_matrix = self.vectors[active_offsets]
         candidate_scores = batch_cosine_similarity(norm_query, candidate_matrix)
+        stage_latencies["distance_calc_ms"] = (time.perf_counter() - t0) * 1000.0
 
-        # 5. Extract top_k items
+        # 5. Extract top_k items (Top-K Selection Stage)
+        t0 = time.perf_counter()
         k = min(top_k, len(candidate_scores))
         top_sub_idx, top_scores = top_k_selection(candidate_scores, k)
-        
+        stage_latencies["top_k_ms"] = (time.perf_counter() - t0) * 1000.0
+
         final_offsets = active_offsets[top_sub_idx]
         final_ids = [self.offset_to_id[off] for off in final_offsets]
 
-        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        elapsed_ms = (time.perf_counter() - t_total_start) * 1000.0
 
         return SearchResult(
             ids=final_ids,
             scores=top_scores.tolist(),
             latency_ms=elapsed_ms,
             candidates_searched=len(candidate_offsets_arr),
-            distance_calcs=len(active_offsets)
+            distance_calcs=len(active_offsets),
+            selected_clusters=target_centroids_list,
+            stage_latencies_ms=stage_latencies
         )
 
     def insert(self, vector_id: int, vector: np.ndarray) -> None:
@@ -139,6 +180,20 @@ class IVFFlatIndex(BaseVectorIndex):
             return False
         self.tombstones[offset] = True
         return True
+
+    def get_cluster_sizes(self) -> Dict[int, int]:
+        """Returns the vector density count across all Voronoi cells."""
+        return {c: len(offsets) for c, offsets in self.inverted_lists.items()}
+
+    def get_vector_cluster(self, vector_id: int) -> int:
+        """Finds which cluster ID a specific vector ID resides in."""
+        if vector_id not in self.id_to_offset:
+            return -1
+        offset = self.id_to_offset[vector_id]
+        for cluster_id, offsets in self.inverted_lists.items():
+            if offset in offsets:
+                return cluster_id
+        return -1
 
     def get_stats(self) -> IndexStats:
         total = len(self.vectors) if self.vectors is not None else 0

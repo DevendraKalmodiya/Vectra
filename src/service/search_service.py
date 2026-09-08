@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from sentence_transformers import SentenceTransformer
 from src.core.exact import ExactIndex
 from src.core.ivf_flat import IVFFlatIndex
@@ -10,7 +10,7 @@ import config
 class SearchService:
     """
     Service layer orchestrating Exact and IVF-Flat search engines,
-    on-the-fly text embeddings, and tombstone soft-deletions.
+    on-the-fly text embeddings, tombstone soft-deletions, and index compaction.
     """
 
     def __init__(self):
@@ -53,17 +53,45 @@ class SearchService:
         else:
             return self.ivf_index.search(query_vector, top_k=top_k, nprobe=nprobe)
 
-    def insert(self, vector_id: int, vector: np.ndarray) -> None:
+    def insert(
+        self,
+        vector_id: int,
+        vector: Optional[np.ndarray] = None,
+        text: Optional[str] = None
+    ) -> np.ndarray:
+        """Inserts a raw vector directly or embeds text on-the-fly before inserting."""
+        if vector is None and text is not None:
+            model = self._get_model()
+            vector = model.encode(text, convert_to_numpy=True).astype(np.float32)
+        if vector is None:
+            raise ValueError("Must provide either a vector or text.")
+
         self.exact_index.insert(vector_id, vector)
         self.ivf_index.insert(vector_id, vector)
+        return vector
 
     def delete(self, vector_id: int) -> bool:
+        """Soft-deletes a vector ID across both indices using tombstones."""
         d1 = self.exact_index.delete(vector_id)
         d2 = self.ivf_index.delete(vector_id)
         if d1 or d2:
             self.tombstone_manager.mark_deleted(vector_id)
             return True
         return False
+
+    def compact(self) -> Tuple[int, int]:
+        """Purges soft-deleted tombstone entries and reclaims memory across indices."""
+        purged_exact = self.tombstone_manager.compact_index(self.exact_index)
+        purged_ivf = self.tombstone_manager.compact_index(self.ivf_index)
+        return purged_exact, purged_ivf
+
+    def get_cluster_sizes(self) -> Dict[int, int]:
+        """Retrieves vector density distribution across all IVF clusters."""
+        return self.ivf_index.get_cluster_sizes()
+
+    def get_vector_cluster(self, vector_id: int) -> int:
+        """Retrieves the assigned cluster ID for a given vector ID."""
+        return self.ivf_index.get_vector_cluster(vector_id)
 
     def get_stats(self) -> Dict[str, IndexStats]:
         return {

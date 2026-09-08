@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 import numpy as np
+
 
 @dataclass
 class SearchResult:
@@ -10,6 +11,9 @@ class SearchResult:
     latency_ms: float
     candidates_searched: int
     distance_calcs: int
+    selected_clusters: List[int] = field(default_factory=list)
+    stage_latencies_ms: Dict[str, float] = field(default_factory=dict)
+
 
 @dataclass
 class IndexStats:
@@ -19,8 +23,12 @@ class IndexStats:
     index_type: str
     is_trained: bool
 
+
 class BaseVectorIndex(ABC):
     """Abstract interface enforcing identical CRUD contracts for Exact and ANN indices."""
+
+    def __init__(self, dimension: int):
+        self.dimension = dimension
 
     @abstractmethod
     def build(self, vectors: np.ndarray) -> None:
