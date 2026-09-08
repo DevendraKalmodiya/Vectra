@@ -1,19 +1,17 @@
-Absolutely — here’s the **updated README after Phase 3**, keeping the documentation technically accurate and aligned with the current implementation.
-
-I also fixed the earlier wording **“zero-external-dependency”** to **“zero external vector-search dependencies”**, which is much more defensible.
+Here’s the **updated `README.md` after Phase 4**, keeping it accurate to the current state and avoiding claims about performance before Phase 8 produces actual benchmarks.
 
 ````markdown
 # Vectra: In-Memory Vector Search Engine
 
-Vectra is an in-memory vector search engine built with **Python and NumPy**, designed to demonstrate the internal mechanics of exact and approximate nearest-neighbor (ANN) search.
+Vectra is an in-memory vector search engine built with **Python and NumPy**, designed to systematically compare exact brute-force vector search against approximate nearest-neighbor (ANN) search using a handcrafted **IVF-Flat** index.
 
-The project implements **exact brute-force search** as the ground-truth baseline and will implement a handcrafted **IVF-Flat index** for approximate search, without relying on Pinecone, FAISS, Chroma, `sklearn.neighbors`, or other vector-search libraries.
+The project intentionally avoids existing vector-search implementations such as **Pinecone, FAISS, Chroma, and `sklearn.neighbors`**.
 
-The core objective is to measure the trade-off between **search accuracy, latency, and computational cost**.
+The core objective is to understand and measure the trade-off between **search accuracy, latency, and computational cost**.
 
 ---
 
-## 🏗️ Project Architecture
+## 🏗️ System Architecture
 
 ```text
                    ┌──────────────────┐
@@ -57,28 +55,30 @@ The core objective is to measure the trade-off between **search accuracy, latenc
 
 # 🎯 Project Objective
 
-Vector databases usually hide the underlying mechanics of vector search behind a simple API.
+Vector databases usually expose vector insertion and search through a simple API while hiding the algorithms underneath.
 
-Vectra goes one level deeper by implementing the fundamental search components itself.
+Vectra implements those core mechanisms explicitly.
 
-The system is designed around two search strategies:
+The system is built around two complementary search strategies:
 
 ```text
-                 Query Vector
-                      │
-             ┌────────┴────────┐
-             ▼                 ▼
-       Exact Search        IVF-Flat
-             │                 │
-             ▼                 ▼
-        Ground Truth      Approximate
-             │              Results
-             └────────┬────────┘
-                      ▼
-                 Recall@K
+                    Query Vector
+                         │
+              ┌──────────┴──────────┐
+              ▼                     ▼
+        Exact Search           IVF-Flat
+              │                     │
+              ▼                     ▼
+         Ground Truth         Approximate
+              │                  Results
+              └──────────┬──────────┘
+                         ▼
+                    Recall@K
 ```
 
-The exact index provides the reference answer, while IVF-Flat attempts to find similar results while examining significantly fewer vectors.
+The exact index provides the reference result.
+
+The IVF-Flat index attempts to retrieve the same nearest neighbors while searching only a subset of the dataset.
 
 The central question is:
 
@@ -86,26 +86,26 @@ The central question is:
 
 ---
 
-# 🚦 Phase Implementation Status
+# 🚦 Implementation Roadmap & Status
 
-| Phase        | Description                                                 | Status                 |
-| :----------- | :---------------------------------------------------------- | :--------------------- |
-| **Phase 1**  | Project Foundation, Environment, Config, Logger & Metrics   | ✅ Completed & Verified |
-| **Phase 2**  | Vector Mathematics Engine (`distance.py`) & Math Tests      | ✅ Completed & Verified |
-| **Phase 3**  | Abstract Index Interface & Exact Search Engine (`exact.py`) | ✅ Completed & Verified |
-| **Phase 4**  | Corpus Embeddings & Dataset Generator (`prepare_data.py`)   | ⏳ Pending              |
-| **Phase 5**  | Vectorized K-Means Partitioning Engine (`kmeans.py`)        | ⏳ Pending              |
-| **Phase 6**  | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`)         | ⏳ Pending              |
-| **Phase 7**  | Ground Truth & Recall@K Evaluation                          | ⏳ Pending              |
-| **Phase 8**  | Latency & Performance Benchmark Engine                      | ⏳ Pending              |
-| **Phase 9**  | Tombstone Soft-Deletion Manager                             | ⏳ Pending              |
-| **Phase 10** | Search Service Layer & FastAPI REST API                     | ⏳ Pending              |
-| **Phase 11** | Streamlit Interactive Benchmark Dashboard                   | ⏳ Pending              |
-| **Phase 12** | End-to-End Testing & Demonstration Setup                    | ⏳ Pending              |
+| Phase        | Description                                               | Status                 |
+| :----------- | :-------------------------------------------------------- | :--------------------- |
+| **Phase 1**  | Project Foundation, Environment, Config, Logger & Metrics | ✅ Completed & Verified |
+| **Phase 2**  | Vector Mathematics Engine (`distance.py`) & Math Tests    | ✅ Completed & Verified |
+| **Phase 3**  | Abstract Base Class & Exact Search Engine (`exact.py`)    | ✅ Completed & Verified |
+| **Phase 4**  | Corpus Embeddings & Dataset Generator (`prepare_data.py`) | ✅ Completed & Verified |
+| **Phase 5**  | Vectorized K-Means Partitioning Engine (`kmeans.py`)      | ⏳ Pending              |
+| **Phase 6**  | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`)       | ⏳ Pending              |
+| **Phase 7**  | Ground Truth & Recall@K Evaluation                        | ⏳ Pending              |
+| **Phase 8**  | Latency & Performance Benchmark Engine                    | ⏳ Pending              |
+| **Phase 9**  | Tombstone Soft-Deletion Manager                           | ⏳ Pending              |
+| **Phase 10** | Search Service Layer & FastAPI REST API                   | ⏳ Pending              |
+| **Phase 11** | Streamlit Interactive Pareto Frontier Dashboard           | ⏳ Pending              |
+| **Phase 12** | End-to-End Testing & Demonstration Setup                  | ⏳ Pending              |
 
 ---
 
-# 📂 Project Directory Structure
+# 📂 Repository Layout
 
 ```text
 Vectra/
@@ -165,37 +165,38 @@ Vectra/
 
 ---
 
-# 🧮 Core Algorithms
+# 🧮 Core Components
 
-## 1. Vector Mathematics
+## 1. Vector Mathematics Engine
 
 The mathematical foundation of Vectra is implemented using NumPy.
 
-The current vector mathematics layer provides:
+The current implementation provides:
 
 * L2 normalization
 * Cosine similarity
 * Vector dot products
-* Matrix-vector operations
-* Matrix multiplication
+* Matrix operations
 * Top-K selection
 * Numerical edge-case handling
 
-For normalized vectors, cosine similarity can be computed as:
+For normalized vectors, cosine similarity becomes a dot product:
 
 ```text
 similarity(q, x) = q · x
 ```
 
-These operations form the computational foundation for both exact and approximate search.
+This mathematical layer is shared by the exact and approximate search implementations.
 
 ---
 
 # 2. Exact Brute-Force Search
 
-The `ExactIndex` compares a query vector against every stored vector.
+`ExactIndex` provides the exhaustive nearest-neighbor search implementation.
 
-For `N` vectors of dimension `D`, the query complexity is approximately:
+For every query, the index compares the query vector against all stored vectors.
+
+For `N` vectors of dimension `D`, query complexity is approximately:
 
 ```text
 O(N × D)
@@ -204,62 +205,65 @@ O(N × D)
 The process is:
 
 ```text
-             Query
-                │
-                ▼
-       Compare with every
-       stored vector
-                │
-                ▼
-       Compute similarity
-                │
-                ▼
-          Top-K selection
-                │
-                ▼
-             Results
+                  Query
+                    │
+                    ▼
+          Compare with every
+           stored vector
+                    │
+                    ▼
+          Compute similarity
+                    │
+                    ▼
+              Top-K
+                    │
+                    ▼
+               Results
 ```
 
-Although brute-force search becomes expensive as the dataset grows, it has an important role in Vectra:
-
-> **Exact search is the ground truth.**
-
-Every approximate-search result can be compared against the exact result to calculate recall.
+The exact index is intentionally computationally expensive because it serves as the **ground-truth reference** for ANN evaluation.
 
 ---
 
-# 3. Index Abstraction
+# 3. Corpus & Dataset Pipeline
 
-Vectra defines a common index interface so different search strategies can be used through the same API.
+Phase 4 introduces the dataset generation pipeline.
 
-Conceptually:
+The pipeline prepares:
 
-```text
-                VectorIndex
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-     ExactIndex           IVFFlatIndex
-     (Exact)              (Approximate)
-```
+* **50,000 dataset vectors**
+* **500 query vectors**
+* **Top-10 ground-truth reference results**
 
-This separation allows the search implementation to evolve without coupling the rest of the system to a specific indexing strategy.
-
-The interface establishes the foundation for operations such as:
+The generated artifacts are stored in the `data/` directory.
 
 ```text
-insert()
-search()
-delete()
+                    Corpus
+                      │
+                      ▼
+               Embedding Pipeline
+                      │
+                      ▼
+              50,000 Vectors
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+        Query Generation   Exact Search
+             │                 │
+             ▼                 ▼
+       500 Query Vectors   Ground Truth
+                               │
+                               ▼
+                          Top-10 IDs
 ```
 
-as additional index functionality is implemented.
+The ground-truth matrix provides the reference required for measuring IVF-Flat recall in later phases.
 
 ---
 
 # 🎯 IVF-Flat
 
-IVF-Flat will provide the approximate nearest-neighbor component of Vectra.
+The next major indexing component is IVF-Flat.
 
 The dataset will be partitioned into `nlist` clusters using K-Means.
 
@@ -275,21 +279,21 @@ The dataset will be partitioned into `nlist` clusters using K-Means.
        Vector      Vector      Vector      Vector
 ```
 
-During a query:
+At query time:
 
-1. Find the closest cluster centroids.
+1. Identify the nearest cluster centroids.
 2. Select the closest `nprobe` clusters.
 3. Retrieve vectors from those clusters.
-4. Compute exact similarity against those candidates.
-5. Select the final top-K results.
+4. Compute exact similarity on the candidates.
+5. Return the top-K results.
 
-The approximation comes from searching only a subset of the dataset.
+The approximation comes from searching only a subset of the available vectors.
 
 ---
 
-# 🎚️ The `nprobe` Trade-off
+# 🎚️ `nprobe`
 
-`nprobe` controls how many IVF clusters are searched.
+`nprobe` determines how many IVF clusters are searched for a query.
 
 ```text
 Higher nprobe
@@ -297,53 +301,51 @@ Higher nprobe
       ├── More clusters searched
       ├── More candidates
       ├── More computation
-      └── Higher recall
+      └── Potentially higher recall
 
 Lower nprobe
       │
       ├── Fewer clusters searched
       ├── Fewer candidates
-      ├── Lower computation
+      ├── Less computation
       └── Potentially lower recall
 ```
 
-This creates the primary accuracy-versus-performance trade-off that Vectra will measure.
+This parameter will become one of the primary controls in the benchmark and dashboard phases.
 
 ---
 
 # 📊 Evaluation Methodology
 
-The evaluation pipeline will use `ExactIndex` as the ground-truth reference.
+The exact index provides the ground-truth nearest neighbors.
+
+IVF-Flat results will then be compared against that ground truth.
 
 ```text
-                    Dataset
-                       │
-              ┌────────┴────────┐
-              ▼                 ▼
-        ExactIndex          IVF-Flat
-              │                 │
-              ▼                 ▼
-        Ground Truth       ANN Results
-              │                 │
-              └────────┬────────┘
-                       ▼
-                  Evaluation
-                       │
-          ┌────────────┼────────────┐
-          ▼            ▼            ▼
-       Recall        Latency    Candidates
+                     Dataset
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+        ExactIndex             IVF-Flat
+             │                     │
+             ▼                     ▼
+       Ground Truth          ANN Results
+             │                     │
+             └──────────┬──────────┘
+                        ▼
+                   Recall@K
 ```
 
-The benchmark suite will measure:
+The evaluation pipeline will measure:
 
 * Recall@K
 * Search latency
 * Index build time
-* Number of candidates examined
-* Number of similarity calculations
+* Candidates examined
+* Similarity calculations
 * Candidate reduction
 * Memory usage
-* Effect of `nprobe`
+* `nprobe` impact
 
 ---
 
@@ -366,36 +368,11 @@ Exact: [1, 2, 3, 4, 5]
 IVF:   [1, 2, 3, 7, 9]
 ```
 
-Three of the five ground-truth neighbors were recovered:
+Three of the five exact neighbors were recovered:
 
 ```text
 Recall@5 = 3 / 5 = 0.60
 ```
-
-This allows approximate search quality to be measured objectively.
-
----
-
-# 🗑️ Soft Deletion
-
-Vectra will support logical deletion using tombstones.
-
-Instead of immediately restructuring an index, deleted vectors can be marked as inactive:
-
-```text
-                Vector ID
-                    │
-                    ▼
-             Tombstone Mask
-                /       \
-               /         \
-              ▼           ▼
-           Active       Deleted
-```
-
-This avoids expensive immediate index reconstruction.
-
-Physical cleanup and index compaction are planned as future extensions.
 
 ---
 
@@ -432,17 +409,31 @@ python --version
 python -m pip --version
 ```
 
-The pip path should point to the project's virtual environment:
+The pip path should point to the project's virtual environment.
+
+---
+
+# 🔬 Data Pipeline
+
+Generate the Phase 4 dataset:
+
+```bash
+python -m scripts.prepare_data
+```
+
+This creates the cached vector and query artifacts required for subsequent phases.
+
+Expected dataset:
 
 ```text
-Vectra\venv\Lib\site-packages\pip
+Dataset vectors:      50,000
+Query vectors:           500
+Ground truth:            500 × 10
 ```
 
 ---
 
-# 🧪 Verification
-
-## Completed Phases: 1–3
+# 🧪 Testing
 
 Run the complete test suite:
 
@@ -450,9 +441,7 @@ Run the complete test suite:
 python -m pytest tests/ -v
 ```
 
-The current tests cover the implemented mathematical and exact-search components.
-
-### Phase 2
+### Phase 2 — Vector Mathematics
 
 ```bash
 python -m pytest tests/test_math.py -v
@@ -467,7 +456,7 @@ Verifies:
 * Top-K selection
 * Numerical correctness
 
-### Phase 3
+### Phase 3 — Exact Search
 
 ```bash
 python -m pytest tests/test_exact.py -v
@@ -481,7 +470,21 @@ Verifies:
 * Index behavior
 * Edge cases
 
-The exact index will later serve as the reference implementation for validating IVF-Flat.
+### Phase 4 — Dataset Pipeline
+
+The dataset pipeline can be verified by executing:
+
+```bash
+python -m scripts.prepare_data
+```
+
+The generated artifacts should contain:
+
+```text
+50,000 dataset vectors
+500 query vectors
+500 × 10 ground-truth matrix
+```
 
 ---
 
@@ -503,7 +506,7 @@ Where:
 * `nprobe` = number of clusters searched
 * `C` = number of candidate vectors examined
 
-Actual performance depends on dataset size, vector dimensionality, data distribution, hardware, and index parameters.
+Actual performance will depend on dataset distribution, vector dimensionality, hardware, and index parameters.
 
 ---
 
@@ -535,9 +538,9 @@ Streamlit
 pytest
 ```
 
-NumPy is used for vectorized numerical computation.
+NumPy is used for vectorized numerical operations.
 
-The indexing and search algorithms themselves are implemented as part of Vectra.
+The indexing algorithms and search logic are implemented within Vectra itself.
 
 ---
 
@@ -545,69 +548,56 @@ The indexing and search algorithms themselves are implemented as part of Vectra.
 
 The planned Streamlit dashboard will provide an interactive laboratory for comparing exact and approximate search.
 
-The interface will expose parameters such as:
+The dashboard will allow users to explore parameters such as:
 
 * Query
 * Index type
 * Top-K
 * `nprobe`
-* Dataset configuration
 
-and display metrics including:
+and observe:
 
-```text
-Search Results
-Recall@K
-Latency
-Candidates Examined
-Candidate Reduction
-```
+* Search results
+* Recall@K
+* Latency
+* Candidates examined
+* Candidate reduction
 
-The goal is to make the ANN trade-off visible rather than presenting only final search results.
+The goal is to make the ANN accuracy/performance trade-off directly observable.
 
 ---
 
 # 🔬 Benchmark Philosophy
 
-Vectra will not hard-code performance claims.
+Vectra does not hard-code performance claims.
 
-Benchmark results will be generated from the actual implementation and hardware.
+All latency and recall results will be generated from the actual implementation and execution environment.
 
-The final benchmark will allow comparisons such as:
+The benchmark will make it possible to answer questions such as:
 
 ```text
-nprobe = 1
-    ↓
-Low computation
-Low latency
-Potentially lower recall
+How many vectors did exact search examine?
 
-nprobe = 5
-    ↓
-More computation
-Higher recall
+How many did IVF-Flat examine?
 
-nprobe = 10
-    ↓
-More computation
-Higher recall
+How much computation was saved?
 
-nprobe = ...
+How much recall was retained?
+
+How does changing nprobe affect the trade-off?
 ```
-
-This makes the final performance claims reproducible and defensible during evaluation.
 
 ---
 
 # 🌱 Future Extensions
 
-The MVP focuses first on implementing and validating the core search algorithms.
+The current MVP focuses on building and validating the fundamental search engine.
 
 Potential extensions include:
 
 ### Adaptive `nprobe`
 
-Automatically select `nprobe` based on query characteristics or a target recall.
+Automatically select an appropriate `nprobe` based on query characteristics or a target recall.
 
 ### Batch Search
 
@@ -623,11 +613,11 @@ Add durable mutation logging and crash recovery.
 
 ### Index Compaction
 
-Periodically rebuild index structures to physically remove tombstoned vectors.
+Physically remove tombstoned vectors through periodic index rebuilding.
 
 ### Distributed / Sharded Search
 
-Partition the dataset across workers and merge their top-K results.
+Partition the index across workers and merge top-K results.
 
 ---
 
@@ -678,7 +668,7 @@ Phase 12
 Testing & Demo
 ```
 
-Each phase is implemented and verified before moving to the next layer.
+Each phase is implemented and verified before moving to the next.
 
 ---
 
@@ -686,7 +676,7 @@ Each phase is implemented and verified before moving to the next layer.
 
 ### Phase 1 — Completed ✅
 
-Project foundation, environment setup, configuration, logging, and metrics infrastructure are implemented and verified.
+Project foundation, virtual environment, configuration, logging, and metrics infrastructure are implemented and verified.
 
 ### Phase 2 — Completed ✅
 
@@ -696,13 +686,33 @@ The vector mathematics engine is implemented and tested, providing the numerical
 
 The abstract index interface and exact brute-force search engine are implemented and verified through automated tests.
 
-### Next — Phase 4 ⏳
+### Phase 4 — Completed ✅
 
-Build the corpus embedding and dataset-generation pipeline required to create the benchmark workload for Vectra.
+The corpus embedding and dataset-generation pipeline has been implemented and verified.
+
+The current benchmark dataset contains:
+
+```text
+50,000 dataset vectors
+500 query vectors
+500 × 10 ground-truth matrix
+```
+
+These cached artifacts provide the workload required for K-Means and IVF-Flat development.
+
+### Next — Phase 5 ⏳
+
+Implement the vectorized K-Means partitioning engine in:
+
+```text
+src/core/kmeans.py
+```
+
+This will provide the clustering layer required by IVF-Flat.
 
 ---
 
-# 💡 The Core Idea
+# 💡 Core Insight
 
 Vectra is ultimately about one measurable systems trade-off:
 
@@ -723,11 +733,11 @@ Vectra is ultimately about one measurable systems trade-off:
                        LOWER RECALL
 ```
 
-Exact search tells us the correct answer.
+Exact search provides the correct answer.
 
-IVF-Flat attempts to find nearly the same answer while examining far fewer vectors.
+IVF-Flat attempts to approximate that answer while examining fewer vectors.
 
-The benchmark tells us **how much computation we save and how much accuracy we retain.**
+The benchmark determines **how much computation can be saved while retaining high-quality search results**.
 
 ---
 
@@ -735,19 +745,20 @@ The benchmark tells us **how much computation we save and how much accuracy we r
 
 This project is intended for educational and engineering demonstration purposes.
 
+````
+
+### Phase 4 Git commits
+
+For the implementation:
+
+```bash
+git commit -m "feat: add corpus embedding and 50k vector dataset pipeline"
+````
+
+For this README update:
+
+```bash
+git commit -m "docs: update README for phase 4 completion"
 ```
 
-### One important thing before committing this
-
-Your current README says:
-
-> `Vectra is a high-performance, zero-external-dependency...`
-
-I'd **definitely not keep that wording**. At Phase 3, you haven't benchmarked performance yet, and the project does have external application/testing dependencies.
-
-The opening above is safer and stronger:
-
-> **“Vectra is an in-memory vector search engine built with Python and NumPy…”**
-
-Then, once Phase 8 gives you actual benchmark results, we can make the README much more impressive with a **real benchmark table and recall-vs-latency chart** instead of making performance claims upfront.
-```
+One thing to watch: **don't commit the generated `.npy` files if your `.gitignore` currently excludes them.** The reproducible `prepare_data.py` pipeline is the important artifact; the 50k-vector cache can be regenerated.
