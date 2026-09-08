@@ -60,7 +60,7 @@ Vectra is a high-performance, zero-external-dependency in-memory vector database
 | **Phase 5** | Vectorized K-Means Partitioning Engine (`kmeans.py`) | ✅ Completed & Verified |
 | **Phase 6** | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`) | ✅ Completed & Verified |
 | **Phase 7 & 8**| Ground Truth Recall@K & Latency Benchmark Engine | ✅ Completed & Verified |
-| **Phase 9** | Tombstone Soft-Deletion Manager | ⏳ Pending |
+| **Phase 9** | Tombstone Soft-Deletion Manager | ✅ Completed & Verified |
 | **Phase 10**| Search Service Layer & FastAPI REST API | ⏳ Pending |
 | **Phase 11**| Streamlit Interactive Pareto Frontier Dashboard | ⏳ Pending |
 | **Phase 12**| End-to-End Testing & Demonstration Setup | ⏳ Pending |
@@ -124,6 +124,7 @@ Vectra/
     ├── test_exact.py
     ├── test_kmeans.py
     ├── test_ivf.py
+    ├── test_tombstone.py
     └── test_api.py
 
 ```
@@ -132,9 +133,10 @@ Vectra/
 
 ## ⚡ Execution & Test Runbook
 
-### 1. Benchmark Execution
+### 1. Data Pipeline & Benchmarking
 
 ```bash
+python -m scripts.prepare_data
 python -m scripts.run_benchmarks
 
 ```
@@ -148,8 +150,7 @@ python -m pytest tests/ -v
 
 ```
 
+---
 
 
-```
-
-Let me know when you are ready to proceed to **Phase 9: Tombstone Soft-Deletion Manager (`src/storage/tombstone.py`)**.
+Let me know when you are ready to proceed to **Phase 10: Search Service Layer & FastAPI REST API** (`src/service/search_service.py`, `src/api/schemas.py`, and `src/api/main.py`).
