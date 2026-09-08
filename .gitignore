@@ -1,0 +1,123 @@
+# =========================
+
+# Python
+
+# =========================
+
+**pycache**/
+*.py[cod]
+*$py.class
+*.so
+
+# =========================
+
+# Virtual Environments
+
+# =========================
+
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+
+# Environment / Secrets
+
+# =========================
+
+.env
+.env.*
+!.env.example
+
+# =========================
+
+# IDE / Editors
+
+# =========================
+
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# =========================
+
+# Testing / Coverage
+
+# =========================
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# =========================
+
+# Type Checking / Linters
+
+# =========================
+
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# =========================
+
+# Build / Packaging
+
+# =========================
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+
+# Project-Generated Data
+
+# =========================
+
+data/*.npy
+data/*.npz
+
+# Keep source/sample text data tracked
+
+!data/raw_texts.json
+
+# Generated benchmark outputs
+
+benchmarks/
+results/
+reports/
+
+# =========================
+
+# Logs
+
+# =========================
+
+*.log
+logs/
+
+# =========================
+
+# Jupyter
+
+# =========================
+
+.ipynb_checkpoints/
+
+# =========================
+
+# OS Files
+
+# =========================
+
+Thumbs.db
+.DS_Store
+EOF
