@@ -1,7 +1,3 @@
-Phase 6 is verified and fully operational. All IVF-Flat unit tests passed cleanly.
-
-### **Updated `README.md**`
-
 ```markdown
 # Vectra: In-Memory Vector Search Engine
 
@@ -63,7 +59,7 @@ Vectra is a high-performance, zero-external-dependency in-memory vector database
 | **Phase 4** | Corpus Embeddings & Dataset Generator (`prepare_data.py`) | ✅ Completed & Verified |
 | **Phase 5** | Vectorized K-Means Partitioning Engine (`kmeans.py`) | ✅ Completed & Verified |
 | **Phase 6** | Handcrafted IVF-Flat Inverted Index (`ivf_flat.py`) | ✅ Completed & Verified |
-| **Phase 7 & 8**| Ground Truth Recall@K & Latency Benchmark Engine | ⏳ Pending |
+| **Phase 7 & 8**| Ground Truth Recall@K & Latency Benchmark Engine | ✅ Completed & Verified |
 | **Phase 9** | Tombstone Soft-Deletion Manager | ⏳ Pending |
 | **Phase 10**| Search Service Layer & FastAPI REST API | ⏳ Pending |
 | **Phase 11**| Streamlit Interactive Pareto Frontier Dashboard | ⏳ Pending |
@@ -84,7 +80,8 @@ Vectra/
 │   ├── raw_texts.json
 │   ├── vectors.npy
 │   ├── queries.npy
-│   └── ground_truth.npy
+│   ├── ground_truth.npy
+│   └── benchmark_results.json
 │
 ├── src/
 │   ├── __init__.py
@@ -135,10 +132,10 @@ Vectra/
 
 ## ⚡ Execution & Test Runbook
 
-### 1. Data Pipeline Execution
+### 1. Benchmark Execution
 
 ```bash
-python -m scripts.prepare_data
+python -m scripts.run_benchmarks
 
 ```
 
@@ -151,15 +148,8 @@ python -m pytest tests/ -v
 
 ```
 
----
 
-### **Git Commit Command**
-
-```bash
-git add .
-git commit -m "feat: implement handcrafted IVF-Flat index engine with unit tests (Phase 6)"
-git push
 
 ```
 
-Let me know when you are ready to proceed to **Phase 7 & 8: Ground Truth Recall@K & Latency Benchmark Engine** (`scripts/run_benchmarks.py`).
+Let me know when you are ready to proceed to **Phase 9: Tombstone Soft-Deletion Manager (`src/storage/tombstone.py`)**.
